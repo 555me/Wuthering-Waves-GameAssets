@@ -20,34 +20,28 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y webp
 
-    # 3. 核心图像处理层：高保真转为 85% 质量、最高压缩强度（m 6）的 WebP，并采用静音和多线程模式
+    # 3. 核心图像处理层：利用 xargs 开启 4 核高并发，并将 effort 降为平衡档（m 4）
     - name: Convert PNG to High-Quality WebP
       run: |
-        echo "开始高保真图像处理流水线（已启用静音压缩与精简日志）..."
+        echo "开始多核高并发图像处理流水线..."
         
         # 统计总文件数
         TOTAL_FILES=$(find . -name "*.png" -type f | wc -l)
-        COUNTER=0
-        
         echo "本次任务共需转换 $TOTAL_FILES 张图片。"
         
-        # 使用 -print0 和 read -d 确保完美兼容带有空格或特殊字符的游戏资产文件名
-        while IFS= read -r -d '' img; do
-          COUNTER=$((COUNTER + 1))
-          
-          # 每 500 张图或者到最后一张图时，打印一次进度，防止日志刷屏卡死浏览器
-          if [ $((COUNTER % 500)) -eq 0 ] || [ "$COUNTER" -eq "$TOTAL_FILES" ]; then
-            echo "[任务进度: $COUNTER / $TOTAL_FILES] 正在高效转换中..."
-          fi
-          
-          # -q 85 控制画质，-m 6 用最大算力压榨体积并优化边缘，-quiet 关闭宏块调试日志
-          cwebp -quiet -q 85 -m 6 -mt "$img" -o "${img%.png}.webp"
-          rm "$img" # 转换成功后立刻删除原 PNG，释放临时磁盘空间
-        done < <(find . -name "*.png" -type f -print0)
+        # 【核心优化】
+        # -P 4: 开启 4 路并发榨干服务器性能
+        # -n 50: 每次让子进程批量认领 50 张图，极大减少频繁创建进程的系统开销
+        # -m 4: 降回默认平衡算力，速度提升数倍
+        find . -name "*.png" -type f -print0 | xargs -0 -P 4 -n 50 bash -c '
+          for img; do
+            cwebp -quiet -q 85 -m 4 -mt "$img" -o "${img%.png}.webp" && rm "$img"
+          done
+        ' _
         
         echo "所有图像高保真转换完成。"
 
-    # 4. 安全拦截层：计算转换后的纯净体积，超过 18GB 自动拉闸，防止撑爆雨云存储桶
+    # 4. 安全拦截层：计算转换后的纯净体积，超过 18GB 自动拉闸
     - name: Check Folder Size Safely
       run: |
         REAL_SIZE_KB=$(du -s --exclude=".git" --exclude=".github" . | awk '{print $1}')
@@ -63,7 +57,7 @@ jobs:
         fi
         echo "体积达标，通过安全检查。"
 
-    # 5. 执行原生 S3 同步（精准排除 Git 隐藏配置文件，不产生冗余流量）
+    # 5. 执行原生 S3 同步
     - name: Sync to RainS3 via Native S3 Protocol
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.SFTP_USERNAME }}     
