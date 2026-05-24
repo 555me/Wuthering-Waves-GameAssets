@@ -1,0 +1,58 @@
+name: High-Fidelity Deploy Pipeline
+
+on:
+  push:
+    branches:
+      - 'main' # 如果新仓库的默认分支是 master，请改为 master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. 拉取仓库最新代码
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # 2. 安装 Linux 官方 WebP 核心压缩工具
+    - name: Install WebP Tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y webp
+
+    # 3. 核心图像处理层：遍历所有 PNG，自动化高保真转为 85% 质量的 WebP 并剔除原图
+    - name: Convert PNG to High-Quality WebP
+      run: |
+        echo "开始高保真图像处理流水线..."
+        # 寻找当前目录下所有的 png 文件并进行高并发转换
+        find . -name "*.png" -type f | while read -r img; do
+          # -q 85 控制质量，-mt 开启多线程加速
+          cwebp -q 85 -mt "$img" -o "${img%.png}.webp"
+          rm "$img" # 转换成功后立刻删除原 PNG，防止重复占用空间
+        done
+        echo "所有图像高保真转换完成。"
+
+    # 4. 安全拦截层：计算转换后的纯净体积，超过 18GB 自动拉闸
+    - name: Check Folder Size Safely
+      run: |
+        REAL_SIZE_KB=$(du -s --exclude=".git" --exclude=".github" . | awk '{print $1}')
+        REAL_SIZE_GB=$(awk "BEGIN {print $REAL_SIZE_KB/1024/1024}")
+        
+        echo "=============================================="
+        echo "转换为 WebP 后，实际需要同步到 RainS3 的总体积为: $REAL_SIZE_GB GB"
+        echo "=============================================="
+        
+        if [ "$REAL_SIZE_KB" -gt 18874368 ]; then
+          echo "【安全拦截】WebP 转换后总体积依然超过 18GB 安全线！已自动断电。"
+          exit 1
+        fi
+        echo "体积达标，通过安全检查。"
+
+    # 5. 执行原生 S3 同步（排除 Git 隐藏配置文件）
+    - name: Sync to RainS3 via Native S3 Protocol
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.SFTP_USERNAME }}     
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.SFTP_PASSWORD }} 
+        AWS_DEFAULT_REGION: 'cn-nb1'                        
+      run: |
+        aws s3 sync ./ s3://wutherin --endpoint-url https://cn-nb1.rains3.com --exclude ".git/*" --exclude ".github/*"
