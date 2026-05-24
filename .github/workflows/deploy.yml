@@ -3,7 +3,7 @@ name: High-Fidelity Deploy Pipeline
 on:
   push:
     branches:
-      - 'main' # 如果新仓库的默认分支是 master，请改为 master
+      - 'main'
 
 jobs:
   deploy:
@@ -20,19 +20,34 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y webp
 
-    # 3. 核心图像处理层：遍历所有 PNG，自动化高保真转为 85% 质量的 WebP 并剔除原图
+    # 3. 核心图像处理层：高保真转为 85% 质量、最高压缩强度（m 6）的 WebP，并采用静音和多线程模式
     - name: Convert PNG to High-Quality WebP
       run: |
-        echo "开始高保真图像处理流水线..."
-        # 寻找当前目录下所有的 png 文件并进行高并发转换
-        find . -name "*.png" -type f | while read -r img; do
-          # -q 85 控制质量，-mt 开启多线程加速
-          cwebp -q 85 -mt "$img" -o "${img%.png}.webp"
-          rm "$img" # 转换成功后立刻删除原 PNG，防止重复占用空间
-        done
+        echo "开始高保真图像处理流水线（已启用静音压缩与精简日志）..."
+        
+        # 统计总文件数
+        TOTAL_FILES=$(find . -name "*.png" -type f | wc -l)
+        COUNTER=0
+        
+        echo "本次任务共需转换 $TOTAL_FILES 张图片。"
+        
+        # 使用 -print0 和 read -d 确保完美兼容带有空格或特殊字符的游戏资产文件名
+        while IFS= read -r -d '' img; do
+          COUNTER=$((COUNTER + 1))
+          
+          # 每 500 张图或者到最后一张图时，打印一次进度，防止日志刷屏卡死浏览器
+          if [ $((COUNTER % 500)) -eq 0 ] || [ "$COUNTER" -eq "$TOTAL_FILES" ]; then
+            echo "[任务进度: $COUNTER / $TOTAL_FILES] 正在高效转换中..."
+          fi
+          
+          # -q 85 控制画质，-m 6 用最大算力压榨体积并优化边缘，-quiet 关闭宏块调试日志
+          cwebp -quiet -q 85 -m 6 -mt "$img" -o "${img%.png}.webp"
+          rm "$img" # 转换成功后立刻删除原 PNG，释放临时磁盘空间
+        done < <(find . -name "*.png" -type f -print0)
+        
         echo "所有图像高保真转换完成。"
 
-    # 4. 安全拦截层：计算转换后的纯净体积，超过 18GB 自动拉闸
+    # 4. 安全拦截层：计算转换后的纯净体积，超过 18GB 自动拉闸，防止撑爆雨云存储桶
     - name: Check Folder Size Safely
       run: |
         REAL_SIZE_KB=$(du -s --exclude=".git" --exclude=".github" . | awk '{print $1}')
@@ -48,7 +63,7 @@ jobs:
         fi
         echo "体积达标，通过安全检查。"
 
-    # 5. 执行原生 S3 同步（排除 Git 隐藏配置文件）
+    # 5. 执行原生 S3 同步（精准排除 Git 隐藏配置文件，不产生冗余流量）
     - name: Sync to RainS3 via Native S3 Protocol
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.SFTP_USERNAME }}     
