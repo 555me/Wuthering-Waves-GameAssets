@@ -4,44 +4,40 @@ on:
   push:
     branches:
       - 'main'
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. 拉取仓库最新代码
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # 2. 安装 Linux 官方 WebP 核心压缩工具
     - name: Install WebP Tools
       run: |
         sudo apt-get update
         sudo apt-get install -y webp
 
-    # 3. 核心图像处理层：利用 xargs 开启 4 核高并发，并将 effort 降为平衡档（m 4）
+    # 3. 核心图像处理层：完美契合 2 核服务器，每完成 100 张图立刻打印一行日志
     - name: Convert PNG to High-Quality WebP
       run: |
-        echo "开始多核高并发图像处理流水线..."
+        echo "开始双核黄金比例图像处理流水线..."
         
-        # 统计总文件数
         TOTAL_FILES=$(find . -name "*.png" -type f | wc -l)
         echo "本次任务共需转换 $TOTAL_FILES 张图片。"
-        
-        # 【核心优化】
-        # -P 4: 开启 4 路并发榨干服务器性能
-        # -n 50: 每次让子进程批量认领 50 张图，极大减少频繁创建进程的系统开销
-        # -m 4: 降回默认平衡算力，速度提升数倍
-        find . -name "*.png" -type f -print0 | xargs -0 -P 4 -n 50 bash -c '
+        echo "实时进度..."
+
+        # -P 2
+        # -n 100
+        # 去掉了 cwebp 的 -mt，防止双核服务器内部线程打架
+        find . -name "*.png" -type f -print0 | xargs -0 -P 2 -n 100 bash -c '
           for img; do
-            cwebp -quiet -q 85 -m 4 -mt "$img" -o "${img%.png}.webp" && rm "$img"
+            cwebp -quiet -q 85 -m 4 "$img" -o "${img%.png}.webp" && rm "$img"
           done
+          echo "====> [实时反馈] 成功高保真转换 100 张图片！"
         ' _
         
         echo "所有图像高保真转换完成。"
 
-    # 4. 安全拦截层：计算转换后的纯净体积，超过 18GB 自动拉闸
     - name: Check Folder Size Safely
       run: |
         REAL_SIZE_KB=$(du -s --exclude=".git" --exclude=".github" . | awk '{print $1}')
@@ -57,7 +53,6 @@ jobs:
         fi
         echo "体积达标，通过安全检查。"
 
-    # 5. 执行原生 S3 同步
     - name: Sync to RainS3 via Native S3 Protocol
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.SFTP_USERNAME }}     
