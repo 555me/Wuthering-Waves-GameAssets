@@ -35,7 +35,7 @@ jobs:
         aws s3 ls s3://wutherin --recursive --endpoint-url https://cn-nb1.rains3.com | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} +[0-9]+ //' > remote_webps.txt
         echo "清单拉取成功，准备进行断点比对。"
 
-    # 4. 智能过滤：剔除已上传的，只把剩下的 15% 写入待办任务
+    # 4. 智能过滤：用 os.sep 规避反斜杠，剔除已上传文件
     - name: Filter Remaining Images (Breakpoint Resume)
       run: |
         python3 -c "
@@ -55,7 +55,7 @@ jobs:
             for file in files:
                 if file.endswith('.png'):
                     local_png_path = os.path.join(root, file)
-                    s3_key = os.path.relpath(local_png_path, '.').replace('\\', '/')
+                    s3_key = os.path.relpath(local_png_path, '.').replace(os.sep, '/')
                     s3_webp_key = s3_key.rsplit('.', 1)[0] + '.webp'
                     
                     if s3_webp_key in remote_webps:
@@ -69,12 +69,12 @@ jobs:
         with open('todo_png.txt', 'w', encoding='utf-8') as f:
             for png in todo_pngs:
                 f.write(png + '\n')
-        print(f'=== 断点状态报告 ===')
+        print('=== 断点状态报告 ===')
         print(f'雨云已存在: {len(remote_webps)} 张图片')
         print(f'本次需补传: {len(todo_pngs)} 张新图片')
         "
 
-    # 5. diff
+    # 5. 核心图像处理层：仅对剩余的资产进行高保真、双核并发压缩
     - name: Convert Remaining PNG to WebP
       run: |
         echo "开始双核全力围剿剩余资产..."
@@ -109,7 +109,7 @@ jobs:
         fi
         echo "空间安全，准备最终补齐对接。"
 
-    # 7. 执行原生 S3 增量同步（天生不覆盖已有文件，只上传新文件）
+    # 7. 执行原生 S3 增量同步
     - name: Sync to RainS3 via Native S3 Protocol
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.SFTP_USERNAME }}     
@@ -117,3 +117,4 @@ jobs:
         AWS_DEFAULT_REGION: 'cn-nb1'                        
       run: |
         aws s3 sync ./ s3://wutherin --endpoint-url https://cn-nb1.rains3.com --exclude ".git/*" --exclude ".github/*" --exclude "remote_webps.txt" --exclude "todo_png.txt"
+
