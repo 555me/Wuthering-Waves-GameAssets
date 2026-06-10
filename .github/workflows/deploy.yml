@@ -5,7 +5,6 @@ on:
     branches:
       - 'main' # 如果你新仓库的默认分支是 master，请将其改为 master
 
-# 抹除 Node.js 20 弃用警告，强制拉高运行环境
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -14,7 +13,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. 拉取仓库最新代码
+    # 0. 爆仓抢救层：在拉取代码前，强行删掉虚拟机预装的无用大组件，腾出约 30GB 硬盘空间
+    - name: Free Disk Space
+      run: |
+        echo "=== 开始清空虚拟机冗余组件 ==="
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        echo "=== 空间腾出完毕，开始正常流水线 ==="
+
+    # 1. 拉取仓库最新代码（此时空间充裕，绝不会再卡死）
     - name: Checkout Repository
       uses: actions/checkout@v4
 
@@ -35,7 +45,7 @@ jobs:
         aws s3 ls s3://wutherin --recursive --endpoint-url https://cn-nb1.rains3.com | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} +[0-9]+ //' > remote_webps.txt
         echo "清单拉取成功，准备进行断点比对。"
 
-    # 4. 智能过滤：用 os.sep 规避反斜杠，剔除已上传文件
+    # 4. 智能过滤：剔除已上传文件
     - name: Filter Remaining Images (Breakpoint Resume)
       run: |
         python3 -c "
@@ -93,7 +103,7 @@ jobs:
         fi
         echo "剩余图像高保真转换完成。"
 
-    # 6. 安全拦截层：计算转换后的纯净体积，超过 18GB 自动拉闸
+    # 6. 安全拦截层
     - name: Check Folder Size Safely
       run: |
         REAL_SIZE_KB=$(du -s --exclude=".git" --exclude=".github" . | awk '{print $1}')
@@ -104,7 +114,7 @@ jobs:
         echo "=============================================="
         
         if [ "$REAL_SIZE_KB" -gt 18874368 ]; then
-          echo "【安全拦截】体积异常超标！已自动断电。"
+          echo "【安全拦截】体积异常超标！"
           exit 1
         fi
         echo "空间安全，准备最终补齐对接。"
@@ -117,4 +127,3 @@ jobs:
         AWS_DEFAULT_REGION: 'cn-nb1'                        
       run: |
         aws s3 sync ./ s3://wutherin --endpoint-url https://cn-nb1.rains3.com --exclude ".git/*" --exclude ".github/*" --exclude "remote_webps.txt" --exclude "todo_png.txt"
-
