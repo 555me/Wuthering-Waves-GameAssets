@@ -2,26 +2,30 @@
 鸣潮国服美术资源
 
 当前资源版本：
-> LauncherVersion：3.5.0<br/>
-> LauncherList：8128714<br/>
-> ResourceVersion：3.5.15<br/>
-> ResourceList：8355105
+> LauncherVersion：3.6.0<br/>
+> LauncherList：8368735<br/>
+> ResourceVersion：3.6.0<br/>
+> ResourceList：8368735
 
 部分内容由于未采用Texture2D类，故未被提取；部分内容未在Client/Content/Aki/UI目录下，未被提取<br/>
 
 无更新版本：<br/>
-3.5
-* 3.5.14（8309532）
-* 3.5.10（8085935）
-* 3.5.9（8085042）
-* 3.5.7（8073661）
-* 3.5.6（8070115）
-* 3.5.5（8059198）
+3.6
+* null
 
 <details>
- <summary>BEFORE 3.5</summary>
+ <summary>BEFORE 3.6</summary>
 
 <ul dir="auto">
+<li>Ver.3.5
+<ul dir="auto">
+<li>3.5.14（8309532）</li>
+<li>3.5.10（8085935）</li>
+<li>3.5.9（8085042）</li>
+<li>3.5.7（8073661）</li>
+<li>3.5.6（8070115）</li>
+<li>3.5.5（8059198）</li>
+</ul></li>
 <li>Ver.3.4
 <ul dir="auto">
 <li>3.4.17（7789993）</li>
