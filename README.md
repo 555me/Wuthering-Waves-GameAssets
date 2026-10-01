@@ -4,14 +4,15 @@
 当前资源版本：
 > LauncherVersion：3.7.0<br/>
 > LauncherList：8837354<br/>
-> ResourceVersion：3.7.7<br/>
-> ResourceList：8970583
+> ResourceVersion：3.7.10<br/>
+> ResourceList：8983826
 
 部分内容由于未采用Texture2D类，故未被提取；部分内容未在Client/Content/Aki/UI目录下，未被提取；3.7版本更新后，新增UHD（极致）等级资源，仓库内热修内容已更新至极致等级，其余仍使用HD（高清）等级资源。<br/>
 
 无更新版本：<br/>
 3.7
-* null
+* 3.7.9（8978280）
+* 3.7.8（8975821）
 
 <details>
  <summary>BEFORE 3.7</summary>
